@@ -1,0 +1,14 @@
+project_root: "../"
+raw_data_dir: "data"
+output_dir: "processed"
+behavior_files:
+  - "data/tianchi_fresh_comp_train_user_online_partA.txt"
+  - "data/tianchi_fresh_comp_train_user_online_partB.txt"
+item_file: "data/tianchi_fresh_comp_train_item_online.txt"
+output_csv_behavior: "behavior_cleaned.csv"
+output_csv_item: "item_cleaned.csv"
+output_summary: "cleaning_summary.json"
+output_parquet_behavior_dir: "behavior_parquet"
+output_parquet_item_dir: "item_parquet"
+chunk_size: 1000000
+encoding: "utf-8"

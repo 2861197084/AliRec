@@ -1,0 +1,29 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# 环境与依赖
+.venv/
+.env
+venv/
+.idea/
+.vscode/
+
+# 操作系统缓存
+.DS_Store
+Thumbs.db
+
+# 数据与中间产物
+processed/
+notebooks/.ipynb_checkpoints/
+logs/
+*.log
+*.tmp
+data/
+
+# 模型与大文件缓存
+checkpoints/
+*.pt
+*.pth
+*.npz
