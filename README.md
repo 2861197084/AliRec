@@ -21,6 +21,9 @@
   - `behavior_parquet/`（分块 Parquet，命名格式 `part_<源文件>_<序号>.parquet`）
   - `item_parquet/items.parquet`
   - `cleaning_summary.json`
+- `processed/eda/`: DuckDB EDA 结果（`eda_summary.json`、`daily_behavior_counts.csv`、`behavior_type_breakdown.csv`）。
+- `src/evaluation/`: 离线评估工具，提供指标函数 (`metrics.py`)、文件加载 (`io.py`) 与命令行接口 (`cli.py`)。
+- `src/evaluation/`: 离线指标评估工具，包含指标函数 (`metrics.py`)、输入输出 (`io.py`) 与 CLI 入口 (`cli.py`)。
 - `src/`: 项目源码，按职责拆分模块。
   - `src/data_cleaning.py`：数据清洗入口脚本，支持配置化运行。
   - `src/configuration/`：集中管理配置解析。
