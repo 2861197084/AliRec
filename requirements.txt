@@ -3,3 +3,4 @@ pyarrow
 PyYAML
 duckdb
 pytest
+lightgbm

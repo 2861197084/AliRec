@@ -22,34 +22,24 @@
   - `item_parquet/items.parquet`
   - `cleaning_summary.json`
 - `processed/eda/`: DuckDB EDA 结果（`eda_summary.json`、`daily_behavior_counts.csv`、`behavior_type_breakdown.csv`）。
+- `processed/recall/`: 候选召回结果存放目录（如 `candidates_*.parquet`）。
+- `processed/features/`: 特征表输出目录（如 `sample_features.parquet`）。
 - `src/evaluation/`: 离线评估工具，提供指标函数 (`metrics.py`)、文件加载 (`io.py`) 与命令行接口 (`cli.py`)。
-- `src/evaluation/`: 离线指标评估工具，包含指标函数 (`metrics.py`)、输入输出 (`io.py`) 与 CLI 入口 (`cli.py`)。
+- `src/recall/`: 候选召回模块，包含数据加载 (`loader.py`)、策略基类 (`base.py`)、召回策略实现（`strategies/`）及 CLI 入口 (`cli.py`)。
+- `src/features/`: 特征工程模块，包含数据上下文 (`loader.py`)、特征生成器 (`transforms/`)、特征构建器 (`builder.py`) 与 CLI (`cli.py`)。
+- `src/models/`: 模型训练模块，现包含 LightGBM 基线实现 (`baseline.py`, `train_lightgbm.py`)。
+- `src/workflows/`: 封装召回+特征+标签的自动化流程脚本。
 - `src/`: 项目源码，按职责拆分模块。
   - `src/data_cleaning.py`：数据清洗入口脚本，支持配置化运行。
   - `src/configuration/`：集中管理配置解析。
   - `src/io_utils.py`：通用 IO 函数，封装目录创建、Parquet 写出等。
-- `configs/`: YAML 配置文件，当前包含 `data_cleaning.yaml`。
-- `notebooks/`: 规划用于探索分析（EDA）的笔记本。
-- `README.md`: 当前文档。
-- `Task.md`: 官方任务说明。
 
 ## 数据处理流程
-2. **运行清洗脚本**
-   - 默认执行：`python -m src.data_cleaning`
-   - 指定配置：`python -m src.data_cleaning --config configs/data_cleaning.yaml`
-3. **输出内容**
-   - CSV：清洗后的行为/商品明细。
-   - Parquet：按分块输出的列式数据，可直接供 pandas/polars/DuckDB/Spark 使用。
-   - 摘要：`processed/cleaning_summary.json` 记录原始/清洗行数、异常计数，便于审计。
-4. **路径解析**
-   - 配置文件支持相对/绝对路径，最终由 `DataCleaningConfig` 统一解析到项目根目录下，方便本地与集群环境保持一致。
-
-
-## 使用说明
-- 依赖环境：conda activate AI 
-- 数据读取：优先使用分块读取或列式存储（Parquet），避免内存瓶颈。
-- **数据格式策略**：统一以 Parquet 作为中间层；若需要缓存模型输入，再根据场景导出 `npz`/`pt` 等格式，保证灵活性与兼容性。
-
-## 后续更新
-- 随进度补充详细的模块文档（数据处理、建模、测试）。
-- 在 README 中记录关键决策、遇到的问题与解决方案。
+- **运行清洗脚本**
+  - 默认执行：`python -m src.data_cleaning`
+  - 指定配置：`python -m src.data_cleaning --config configs/data_cleaning.yaml`
+- **生成 EDA**：`python -m src.eda_overview` 输出 `processed/eda/` 下的统计摘要与 CSV。
+- **候选召回**：`python -m src.recall.cli 2014-12-19 --max-per-user 300` 可生成面向预测日的候选集，参数支持自定义时间窗口、用户子集、输出路径。
+- **特征构建**：`python -m src.features.cli 2014-12-19 processed/recall/candidates_sample.parquet --output processed/features/sample_features.parquet --label-day 2014-12-19` 将召回结果拼接用户/商品统计特征，并通过 `--label-day` 参数基于预测日购买记录写入 `label` 列。
+- **训练/验证集生成**：`python -m src.workflows.build_dataset train 2014-12-18 --label-day 2014-12-19 --output-dir processed/datasets` 会自动运行召回、特征、标签步骤，输出特征表到 `processed/datasets/train/`（`val/test` 模式同理）。
+- **基线训练**：`python -m src.models.train_lightgbm processed/datasets/train/features_2014-12-18.parquet --valid processed/datasets/val/features_2014-12-19.parquet --output-model processed/models/lightgbm.txt --prediction-output processed/predictions/lightgbm_val.parquet` 训练 LightGBM 模型并输出验证集预测（当前召回覆盖不足，指标为 0）。
