@@ -4,3 +4,4 @@ PyYAML
 duckdb
 pytest
 lightgbm
+networkx

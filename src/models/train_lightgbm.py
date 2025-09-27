@@ -7,18 +7,23 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.evaluation.f1_search import search_best_f1
 from src.evaluation.metrics import evaluate
 from src.models.baseline import LightGBMBaseline, LightGBMConfig
+from src.models.data import load_dataset
+from src.models.postprocess import SubmissionConfig, select_predictions, write_submission
 
 
 DEFAULT_PARAMS = {
     "objective": "binary",
     "metric": ["binary_logloss", "auc"],
     "learning_rate": 0.05,
-    "num_leaves": 64,
+    "num_leaves": 128,
     "feature_fraction": 0.8,
     "bagging_fraction": 0.8,
-    "bagging_freq": 5,
+    "bagging_freq": 1,
+    "lambda_l1": 0.01,
+    "lambda_l2": 1.0,
     "verbose": -1,
 }
 
@@ -29,24 +34,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--valid", type=Path, default=None, help="可选，验证数据 Parquet 路径")
     parser.add_argument("--output-model", type=Path, default=Path("processed/models/lightgbm.txt"), help="模型输出路径")
     parser.add_argument("--prediction-output", type=Path, default=Path("processed/predictions/lightgbm_valid.parquet"), help="验证集预测输出路径")
-    parser.add_argument("--top-k", type=int, default=None, help="评估时选取的 Top-K 预测数量，默认与真实正例数量一致")
-    parser.add_argument("--predict", type=Path, default=None, help="可选，指定生成预测得分的数据集路径（无标签）")
-    parser.add_argument("--submission-output", type=Path, default=None, help="若指定，将预测结果按照 F1 提交格式输出 TSV")
-    parser.add_argument("--submission-size", type=int, default=50000, help="提交文件中保留的 Top-N 结果")
     parser.add_argument("--num-boost-round", type=int, default=200)
     parser.add_argument("--early-stopping", type=int, default=20)
+    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "gpu"], help="LightGBM 设备类型")
+    parser.add_argument("--f1-topk", type=int, nargs="*", default=list(range(1, 31)))
+    parser.add_argument("--f1-threshold", type=float, nargs="*", default=[i / 100 for i in range(5, 96, 5)])
+    parser.add_argument("--per-user-cap", type=int, default=20)
+    parser.add_argument("--predict", type=Path, default=None, help="可选，指定生成预测得分的数据集路径")
+    parser.add_argument("--submission-output", type=Path, default=None, help="若指定，将输出提交文件")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
 
+    params = DEFAULT_PARAMS.copy()
+    if args.device == "gpu":
+        params.update({"device_type": "gpu"})
+
     config = LightGBMConfig(
-        params=DEFAULT_PARAMS,
+        params=params,
         num_boost_round=args.num_boost_round,
         early_stopping_rounds=args.early_stopping,
     )
     model = LightGBMBaseline(config)
+
     print("开始训练 LightGBM 模型...")
     model.fit(args.train, args.valid)
     print("训练完成")
@@ -60,42 +72,36 @@ def main() -> None:
         pred_output_path.parent.mkdir(parents=True, exist_ok=True)
         pred_df.to_parquet(pred_output_path, index=False)
 
-        valid_df = pd.read_parquet(args.valid)
-        truth_rows = valid_df.loc[valid_df["label"] == 1, ["user_id", "item_id"]]
-        truth_pairs = {f"{row.user_id}\t{row.item_id}" for _, row in truth_rows.iterrows()}
+        valid_dataset = load_dataset(args.valid)
+        truth_df = valid_dataset.truth_pairs()
 
-        if truth_pairs:
-            top_k = args.top_k or len(truth_pairs)
-            prediction_pairs = set(
-                pred_df.sort_values("score", ascending=False)
-                .head(top_k)
-                [["user_id", "item_id"]]
-                .apply(lambda r: f"{r.user_id}\t{r.item_id}", axis=1)
+        if truth_df.empty:
+            print("验证集中无正样本(label=1)，无法进行 F1 搜索。")
+        else:
+            best_result = search_best_f1(
+                pred_df,
+                truth_df,
+                threshold_grid=args.f1_threshold,
+                topk_grid=args.f1_topk,
+                per_user_cap=args.per_user_cap,
             )
-            metrics = evaluate(prediction_pairs, truth_pairs)
-            print(f"验证集指标：Precision={metrics.precision:.4f}, Recall={metrics.recall:.4f}, F1={metrics.f1:.4f}")
-        else:
-            print("验证集中无正样本(label=1)，请扩大召回范围后重试评估。")
+            print(
+                f"验证集最优 F1：{best_result.f1:.4f} (策略={best_result.strategy}, 参数={best_result.parameter}, cap={best_result.per_user_cap})"
+            )
 
-    if args.predict is not None:
-        print("生成预测数据...")
-        predict_df = model.predict(args.predict)
-        predict_output_path = args.submission_output.resolve() if args.submission_output else None
-        if predict_output_path is not None:
-            predict_output_path.parent.mkdir(parents=True, exist_ok=True)
-            if predict_output_path.suffix.lower() in {".tsv", ""}:
-                submission_size = args.submission_size
-                submission_df = predict_df.sort_values("score", ascending=False).head(submission_size)
-                submission_df[["user_id", "item_id"]].to_csv(
-                    predict_output_path,
-                    sep="\t",
-                    header=False,
-                    index=False,
+            if args.predict is not None:
+                print("生成预测数据...")
+                predict_df = model.predict(args.predict)
+                submission_config = SubmissionConfig(
+                    strategy=best_result.strategy,
+                    parameter=best_result.parameter,
+                    per_user_cap=best_result.per_user_cap,
                 )
-            else:
-                predict_df.to_parquet(predict_output_path, index=False)
-        else:
-            print(predict_df.head())
+                selected = select_predictions(predict_df, submission_config)
+
+                if args.submission_output is not None:
+                    write_submission(selected, args.submission_output.resolve())
+                    print(f"提交文件已生成：{args.submission_output}")
 
 
 if __name__ == "__main__":

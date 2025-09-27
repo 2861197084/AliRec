@@ -81,8 +81,14 @@ class RecentInteractionStrategy(RecallStrategy):
 
         params = [lookback_start, self.cutoff, *user_id_list, self.config.max_candidates_per_user]
         result = con.execute(query, params).fetchall()
-        for user_id, item_id, score, _rank in result:
-            yield Candidate(user_id=int(user_id), item_id=int(item_id), score=float(score), strategy=self.name)
+        for user_id, item_id, score, rank in result:
+            yield Candidate(
+                user_id=int(user_id),
+                item_id=int(item_id),
+                score=float(score),
+                strategy=self.name,
+                metadata={"source_rank": int(rank)},
+            )
 
     def _build_weight_case(self) -> str:
         return "\n".join(

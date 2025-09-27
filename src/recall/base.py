@@ -7,13 +7,14 @@ from typing import Iterable, List
 
 
 class Candidate:
-    __slots__ = ("user_id", "item_id", "score", "strategy")
+    __slots__ = ("user_id", "item_id", "score", "strategy", "metadata")
 
-    def __init__(self, user_id: int, item_id: int, score: float, strategy: str) -> None:
+    def __init__(self, user_id: int, item_id: int, score: float, strategy: str, metadata: dict | None = None) -> None:
         self.user_id = user_id
         self.item_id = item_id
         self.score = score
         self.strategy = strategy
+        self.metadata = metadata or {}
 
     def to_tuple(self) -> tuple[int, int, float, str]:
         return self.user_id, self.item_id, self.score, self.strategy

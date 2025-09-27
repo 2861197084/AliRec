@@ -13,13 +13,13 @@ import pandas as pd
 class Dataset:
     data: pd.DataFrame
     label_column: str = "label"
-    meta_columns: Sequence[str] = ("user_id", "item_id", "source_strategy")
+    meta_columns: Sequence[str] = ("user_id", "item_id", "source_strategy", "source_rank", "source_count")
 
     def feature_matrix(self) -> pd.DataFrame:
-        drop_cols = list(self.meta_columns)
-        drop_cols = [column for column in drop_cols if column in self.data.columns]
+        drop_cols = [col for col in self.meta_columns if col in self.data.columns]
         if self.label_column in self.data.columns:
             drop_cols.append(self.label_column)
+        drop_cols = list(dict.fromkeys(drop_cols))
         return self.data.drop(columns=drop_cols)
 
     def labels(self) -> pd.Series | None:
@@ -31,6 +31,11 @@ class Dataset:
         selected = columns or self.meta_columns
         available = [column for column in selected if column in self.data.columns]
         return self.data[available].copy()
+
+    def truth_pairs(self) -> pd.DataFrame:
+        if self.label_column not in self.data.columns:
+            raise ValueError("标签列不存在")
+        return self.data.loc[self.data[self.label_column] == 1, ["user_id", "item_id"]]
 
 
 def load_dataset(path: Path) -> Dataset:

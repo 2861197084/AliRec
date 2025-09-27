@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 import duckdb
+import pandas as pd
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,8 @@ class RecallDataContext:
 
     behavior_pattern: str
     item_path: Path
+    items_df: pd.DataFrame
+    item_id_set: frozenset[int]
 
     def connect(self) -> duckdb.DuckDBPyConnection:
         con = duckdb.connect(database=":memory:")
@@ -36,6 +39,15 @@ def create_default_context(project_root: Optional[Path] = None) -> RecallDataCon
 
     behavior_dir = _ensure_exists(root / "processed" / "behavior_parquet", "行为数据目录")
     item_path = _ensure_exists(root / "processed" / "item_parquet" / "items.parquet", "商品子集 Parquet")
+
+    items_df = pd.read_parquet(item_path).drop_duplicates(subset=["item_id"])
+    item_id_set = frozenset(items_df["item_id"].astype("int64").tolist())
+
     behavior_pattern = (behavior_dir / "*.parquet").as_posix()
-    return RecallDataContext(behavior_pattern=behavior_pattern, item_path=item_path)
+    return RecallDataContext(
+        behavior_pattern=behavior_pattern,
+        item_path=item_path,
+        items_df=items_df,
+        item_id_set=item_id_set,
+    )
 

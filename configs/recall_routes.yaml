@@ -1,0 +1,20 @@
+routes:
+  - name: recent
+    lookback_days: 3
+    max_per_user: 150
+  - name: covis
+    lookback_days: 5
+    window_hours: 6
+    max_neighbors: 80
+    max_per_user: 120
+  - name: itemcf
+    lookback_days: 7
+    max_neighbors: 100
+    max_per_user: 100
+  - name: category_popular
+    lookback_days: 7
+    max_per_user: 80
+  - name: geo_popular
+    lookback_days: 5
+    prefix_length: 5
+    max_per_user: 60
